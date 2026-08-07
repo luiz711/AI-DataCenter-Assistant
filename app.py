@@ -1,5 +1,5 @@
 import os
-
+from utils import load_knowledge_base
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -47,6 +47,11 @@ if "messages" not in st.session_state:
 
 with st.sidebar:
     st.title("🖥️ AI Data Center")
+
+    knowledge = load_knowledge_base()
+
+with st.expander("📚 Knowledge Base"):
+    st.text(knowledge)
 
     st.markdown("---")
 
