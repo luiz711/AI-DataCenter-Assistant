@@ -143,6 +143,7 @@ question = st.chat_input("Ask a data center question...")
 
 if question:
 
+
     # Save the user's message
     st.session_state.messages.append(
         {
@@ -155,25 +156,52 @@ if question:
     with st.chat_message("user"):
         st.markdown(question)
 
+    # ----------------------------
+    # Search knowledge base
+    # ----------------------------
+
+    search_results = search_knowledge_base(question)
+
+    relevant_knowledge = ""
+
+    for score, filename, content in search_results:
+        relevant_knowledge += (
+            f"\n\nSource: {filename}\n"
+            f"{content}"
+        )
+
+    if not relevant_knowledge:
+        relevant_knowledge = (
+            "No relevant internal documentation was found."
+        )
+
+    # ----------------------------
     # Build the conversation
+    # ----------------------------
+
     conversation = [
         {
             "role": "system",
             "content": (
                 SYSTEM_PROMPT
                 + "\n\n"
-                + "Use the following knowledge base when relevant. "
-                + "If the knowledge base does not contain enough information, "
-                + "say so and then provide general guidance.\n\n"
-                + "Knowledge Base:\n"
-                + knowledge
+                + "Use the following retrieved internal documentation "
+                + "when relevant. "
+                + "Prefer the retrieved documentation when answering. "
+                + "If the retrieved documentation does not fully answer "
+                + "the question, say so and then provide general guidance."
+                + "\n\nRetrieved Knowledge:\n"
+                + relevant_knowledge
             ),
         }
     ]
 
     conversation.extend(st.session_state.messages)
 
+    # ----------------------------
     # Generate the AI response
+    # ----------------------------
+
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
             try:
@@ -194,4 +222,6 @@ if question:
                 )
 
             except Exception as error:
-                st.error(f"Unable to generate a response: {error}")
+                st.error(
+                    f"Unable to generate a response: {error}"
+                )
