@@ -1,10 +1,11 @@
 import os
-from utils import load_knowledge_base
+
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from prompts import SYSTEM_PROMPT
+from utils import load_knowledge_base
 
 
 # ----------------------------
@@ -42,16 +43,18 @@ if "messages" not in st.session_state:
 
 
 # ----------------------------
+# Load knowledge base
+# ----------------------------
+
+knowledge = load_knowledge_base()
+
+
+# ----------------------------
 # Sidebar
 # ----------------------------
 
 with st.sidebar:
     st.title("🖥️ AI Data Center")
-
-    knowledge = load_knowledge_base()
-
-with st.expander("📚 Knowledge Base"):
-    st.text(knowledge)
 
     st.markdown("---")
 
@@ -117,6 +120,14 @@ st.write(
 
 
 # ----------------------------
+# Knowledge base preview
+# ----------------------------
+
+with st.expander("📚 Knowledge Base"):
+    st.text(knowledge)
+
+
+# ----------------------------
 # Display chat history
 # ----------------------------
 
@@ -132,6 +143,8 @@ for message in st.session_state.messages:
 question = st.chat_input("Ask a data center question...")
 
 if question:
+
+    # Save the user's message
     st.session_state.messages.append(
         {
             "role": "user",
@@ -139,18 +152,29 @@ if question:
         }
     )
 
+    # Display the user's message
     with st.chat_message("user"):
         st.markdown(question)
 
+    # Build the conversation
     conversation = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": (
+                SYSTEM_PROMPT
+                + "\n\n"
+                + "Use the following knowledge base when relevant. "
+                + "If the knowledge base does not contain enough information, "
+                + "say so and then provide general guidance.\n\n"
+                + "Knowledge Base:\n"
+                + knowledge
+            ),
         }
     ]
 
     conversation.extend(st.session_state.messages)
 
+    # Generate the AI response
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
             try:
@@ -160,6 +184,7 @@ if question:
                 )
 
                 answer = response.output_text
+
                 st.markdown(answer)
 
                 st.session_state.messages.append(
