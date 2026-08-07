@@ -4,7 +4,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from prompts import SYSTEM_PROMPT
+from prompts import SYSTEM_PROMPT, LOG_ANALYZER_PROMPT
 from utils import load_knowledge_base, search_knowledge_base
 
 # ----------------------------
@@ -90,6 +90,11 @@ with st.sidebar:
     )
 
     st.button(
+        "📊 Log Analyzer",
+        use_container_width=True,
+    )
+
+    st.button(
         "🎤 Interview Practice",
         use_container_width=True,
     )
@@ -136,13 +141,84 @@ for message in st.session_state.messages:
 
 
 # ----------------------------
+# Log Analyzer
+# ----------------------------
+
+with st.expander("📊 AI Log Analyzer"):
+
+    st.write(
+        "Paste a log or upload a .txt/.log file for AI analysis."
+    )
+
+    uploaded_log = st.file_uploader(
+        "Upload a log file",
+        type=["txt", "log"],
+    )
+
+    if "log_input" not in st.session_state:
+        st.session_state.log_input = ""
+
+    if uploaded_log is not None:
+        try:
+            uploaded_text = uploaded_log.getvalue().decode("utf-8")
+
+            st.session_state.log_input = uploaded_text
+
+            st.success(
+                f"Loaded: {uploaded_log.name}"
+            )
+
+        except UnicodeDecodeError:
+            st.error(
+                "This file could not be read as UTF-8 text."
+            )
+
+    log_text = st.text_area(
+        "Log contents",
+        height=200,
+        key="log_input",
+    )
+
+    if st.button("Analyze Log"):
+
+        if not log_text.strip():
+            st.warning(
+                "Please paste or upload a log before analyzing."
+            )
+
+        else:
+            with st.spinner("Analyzing log..."):
+
+                try:
+                    log_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": LOG_ANALYZER_PROMPT,
+                            },
+                            {
+                                "role": "user",
+                                "content": log_text,
+                            },
+                        ],
+                    )
+
+                    st.markdown(log_response.output_text)
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to analyze the log: {error}"
+                    )
+
+
+# ----------------------------
 # Chat input
 # ----------------------------
 
 question = st.chat_input("Ask a data center question...")
 
 if question:
-
 
     # Save the user's message
     st.session_state.messages.append(
