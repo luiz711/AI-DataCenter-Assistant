@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from prompts import SYSTEM_PROMPT
-from utils import load_knowledge_base
-
+from utils import load_knowledge_base, search_knowledge_base
 
 # ----------------------------
 # Load configuration
