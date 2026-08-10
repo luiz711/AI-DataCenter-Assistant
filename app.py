@@ -9,7 +9,9 @@ from prompts import (
     LOG_ANALYZER_PROMPT,
     SOP_GENERATOR_PROMPT,
     INCIDENT_SUMMARY_PROMPT,
+    SERVER_TROUBLESHOOTING_PROMPT,
 )
+
 
 from utils import load_knowledge_base, search_knowledge_base
 
@@ -329,11 +331,78 @@ elif st.session_state.page == "Log Analyzer":
 
 elif st.session_state.page == "Server Troubleshooting":
 
-    st.title("🔧 Server Troubleshooting")
+    st.title("🔧 AI Server Troubleshooting")
 
-    st.info(
-        "This tool is coming next."
+    st.write(
+        "Describe a server problem and the assistant will help you "
+        "work through a structured troubleshooting process."
     )
+
+    server_problem = st.text_area(
+        "Describe the server issue",
+        placeholder=(
+            "Example: Server powers on, but there is no network connectivity. "
+            "The link light on NIC 1 is off."
+        ),
+        height=180,
+        key="server_problem",
+    )
+
+    if st.button("Troubleshoot Server"):
+
+        if not server_problem.strip():
+            st.warning(
+                "Please describe the server problem before troubleshooting."
+            )
+
+        else:
+
+            # Search your internal knowledge base
+            search_results = search_knowledge_base(server_problem)
+
+            relevant_knowledge = ""
+
+            for score, filename, content in search_results:
+                relevant_knowledge += (
+                    f"\n\nSource: {filename}\n"
+                    f"{content}"
+                )
+
+            if not relevant_knowledge:
+                relevant_knowledge = (
+                    "No relevant internal documentation was found."
+                )
+
+            with st.spinner("Analyzing server issue..."):
+
+                try:
+                    troubleshooting_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    SERVER_TROUBLESHOOTING_PROMPT
+                                    + "\n\n"
+                                    + "Retrieved Internal Documentation:\n"
+                                    + relevant_knowledge
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": server_problem,
+                            },
+                        ],
+                    )
+
+                    st.markdown(
+                        troubleshooting_response.output_text
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to troubleshoot the server: {error}"
+                    )
 
 
 # ----------------------------
