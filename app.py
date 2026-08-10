@@ -8,7 +8,9 @@ from prompts import (
     SYSTEM_PROMPT,
     LOG_ANALYZER_PROMPT,
     SOP_GENERATOR_PROMPT,
+    INCIDENT_SUMMARY_PROMPT,
 )
+
 from utils import load_knowledge_base, search_knowledge_base
 
 
@@ -439,11 +441,58 @@ elif st.session_state.page == "SOP Generator":
 
 elif st.session_state.page == "Incident Summary":
 
-    st.title("📋 Incident Summary")
+    st.title("📋 AI Incident Summary")
 
-    st.info(
-        "This tool is coming soon."
+    st.write(
+        "Paste incident notes, troubleshooting details, or log findings "
+        "and the assistant will create a structured incident report."
     )
+
+    incident_notes = st.text_area(
+        "Incident notes",
+        placeholder=(
+            "Example: Server01 lost network connectivity at 14:32. "
+            "Technician verified power and cabling. Switch port showed "
+            "no link. Cable was replaced and connectivity was restored "
+            "at 14:47."
+        ),
+        height=250,
+        key="incident_notes",
+    )
+
+    if st.button("Generate Incident Summary"):
+
+        if not incident_notes.strip():
+            st.warning(
+                "Please enter incident notes before generating a summary."
+            )
+
+        else:
+            with st.spinner("Creating incident summary..."):
+
+                try:
+                    incident_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": INCIDENT_SUMMARY_PROMPT,
+                            },
+                            {
+                                "role": "user",
+                                "content": incident_notes,
+                            },
+                        ],
+                    )
+
+                    st.markdown(
+                        incident_response.output_text
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to generate the incident summary: {error}"
+                    )
 
 
 # ----------------------------
