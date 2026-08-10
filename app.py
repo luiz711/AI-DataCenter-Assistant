@@ -4,7 +4,11 @@ import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from prompts import SYSTEM_PROMPT, LOG_ANALYZER_PROMPT
+from prompts import (
+    SYSTEM_PROMPT,
+    LOG_ANALYZER_PROMPT,
+    SOP_GENERATOR_PROMPT,
+)
 from utils import load_knowledge_base, search_knowledge_base
 
 
@@ -375,11 +379,58 @@ elif st.session_state.page == "Cabling":
 
 elif st.session_state.page == "SOP Generator":
 
-    st.title("📄 SOP Generator")
+    st.title("📄 AI SOP Generator")
 
-    st.info(
-        "This tool is coming soon."
+    st.write(
+        "Describe a data center or IT procedure and the assistant "
+        "will create a structured SOP draft."
     )
+
+    sop_task = st.text_area(
+        "What procedure do you need?",
+        placeholder=(
+            "Example: Replace a failed redundant power supply "
+            "in a rack-mounted server."
+        ),
+        height=150,
+        key="sop_task",
+    )
+
+    if st.button(
+        "Generate SOP",
+        use_container_width=False,
+    ):
+
+        if not sop_task.strip():
+            st.warning(
+                "Please enter a procedure before generating an SOP."
+            )
+
+        else:
+
+            with st.spinner("Generating SOP..."):
+
+                try:
+                    sop_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": SOP_GENERATOR_PROMPT,
+                            },
+                            {
+                                "role": "user",
+                                "content": sop_task,
+                            },
+                        ],
+                    )
+
+                    st.markdown(sop_response.output_text)
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to generate the SOP: {error}"
+                    )
 
 
 # ----------------------------
