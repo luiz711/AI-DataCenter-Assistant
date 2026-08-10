@@ -13,6 +13,7 @@ from prompts import (
     NETWORKING_ASSISTANT_PROMPT,
     CABLING_ASSISTANT_PROMPT,
     RACK_STACK_PROMPT,
+    INTERVIEW_PRACTICE_PROMPT,
 )
 
 
@@ -770,8 +771,76 @@ elif st.session_state.page == "Incident Summary":
 
 elif st.session_state.page == "Interview Practice":
 
-    st.title("🎤 Interview Practice")
+    st.title("🎤 AI Interview Practice")
 
-    st.info(
-        "This tool is coming soon."
+    st.write(
+        "Practice realistic data center and IT interview questions "
+        "and receive feedback on your answers."
     )
+
+    interview_question = st.selectbox(
+        "Choose a practice question",
+        [
+            "What would you check first if a server will not power on?",
+            "How would you troubleshoot a server with no network connectivity?",
+            "Explain the difference between a switch and a router.",
+            "What is hot aisle and cold aisle containment?",
+            "How would you handle a damaged fiber cable?",
+            "What steps would you take before replacing server hardware?",
+            "Tell me about a time you had to troubleshoot a technical problem.",
+            "How do you prioritize safety while working in a data center?",
+        ],
+        key="interview_question",
+    )
+
+    st.markdown("### Interview Question")
+    st.info(interview_question)
+
+    interview_answer = st.text_area(
+        "Your answer",
+        placeholder=(
+            "Answer the question as if you were speaking directly "
+            "to the interviewer."
+        ),
+        height=220,
+        key="interview_answer",
+    )
+
+    if st.button("Evaluate My Answer"):
+
+        if not interview_answer.strip():
+            st.warning(
+                "Please enter your answer before requesting feedback."
+            )
+
+        else:
+            with st.spinner("Reviewing your answer..."):
+
+                try:
+                    interview_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": INTERVIEW_PRACTICE_PROMPT,
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Interview Question:\n"
+                                    f"{interview_question}\n\n"
+                                    f"Candidate Answer:\n"
+                                    f"{interview_answer}"
+                                ),
+                            },
+                        ],
+                    )
+
+                    st.markdown(
+                        interview_response.output_text
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to evaluate the answer: {error}"
+                    )
