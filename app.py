@@ -12,6 +12,7 @@ from prompts import (
     SERVER_TROUBLESHOOTING_PROMPT,
     NETWORKING_ASSISTANT_PROMPT,
     CABLING_ASSISTANT_PROMPT,
+    RACK_STACK_PROMPT,
 )
 
 
@@ -413,11 +414,77 @@ elif st.session_state.page == "Server Troubleshooting":
 
 elif st.session_state.page == "Rack & Stack":
 
-    st.title("🖥️ Rack & Stack")
+    st.title("🖥️ AI Rack & Stack Planner")
 
-    st.info(
-        "This tool is coming soon."
+    st.write(
+        "Describe the equipment you need to install and the assistant "
+        "will help build a rack deployment plan."
     )
+
+    rack_request = st.text_area(
+        "Describe the rack deployment",
+        placeholder=(
+            "Example: Install four 2U servers, two 1U switches, "
+            "and two rack PDUs in a 42U rack."
+        ),
+        height=180,
+        key="rack_request",
+    )
+
+    if st.button("Create Rack Plan"):
+
+        if not rack_request.strip():
+            st.warning(
+                "Please describe the rack deployment before creating a plan."
+            )
+
+        else:
+
+            search_results = search_knowledge_base(rack_request)
+
+            relevant_knowledge = ""
+
+            for score, filename, content in search_results:
+                relevant_knowledge += (
+                    f"\n\nSource: {filename}\n"
+                    f"{content}"
+                )
+
+            if not relevant_knowledge:
+                relevant_knowledge = (
+                    "No relevant internal documentation was found."
+                )
+
+            with st.spinner("Building rack deployment plan..."):
+
+                try:
+                    rack_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    RACK_STACK_PROMPT
+                                    + "\n\n"
+                                    + "Retrieved Internal Documentation:\n"
+                                    + relevant_knowledge
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": rack_request,
+                            },
+                        ],
+                    )
+
+                    st.markdown(
+                        rack_response.output_text
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to create the rack plan: {error}"
+                    )
 
 
 # ----------------------------
