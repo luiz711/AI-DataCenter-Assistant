@@ -11,6 +11,7 @@ from prompts import (
     INCIDENT_SUMMARY_PROMPT,
     SERVER_TROUBLESHOOTING_PROMPT,
     NETWORKING_ASSISTANT_PROMPT,
+    CABLING_ASSISTANT_PROMPT,
 )
 
 
@@ -503,11 +504,77 @@ elif st.session_state.page == "Networking":
 
 elif st.session_state.page == "Cabling":
 
-    st.title("🔌 Cabling Assistant")
+    st.title("🔌 AI Cabling Assistant")
 
-    st.info(
-        "This tool is coming soon."
+    st.write(
+        "Describe a cabling issue or ask a question about copper, fiber, "
+        "labeling, routing, or cable management."
     )
+
+    cabling_problem = st.text_area(
+        "Describe the cabling issue",
+        placeholder=(
+            "Example: A server has no link after a cable move. "
+            "The Ethernet cable appears connected, but the NIC link light is off."
+        ),
+        height=180,
+        key="cabling_problem",
+    )
+
+    if st.button("Analyze Cabling Issue"):
+
+        if not cabling_problem.strip():
+            st.warning(
+                "Please describe the cabling issue before analyzing."
+            )
+
+        else:
+
+            search_results = search_knowledge_base(cabling_problem)
+
+            relevant_knowledge = ""
+
+            for score, filename, content in search_results:
+                relevant_knowledge += (
+                    f"\n\nSource: {filename}\n"
+                    f"{content}"
+                )
+
+            if not relevant_knowledge:
+                relevant_knowledge = (
+                    "No relevant internal documentation was found."
+                )
+
+            with st.spinner("Analyzing cabling issue..."):
+
+                try:
+                    cabling_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    CABLING_ASSISTANT_PROMPT
+                                    + "\n\n"
+                                    + "Retrieved Internal Documentation:\n"
+                                    + relevant_knowledge
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": cabling_problem,
+                            },
+                        ],
+                    )
+
+                    st.markdown(
+                        cabling_response.output_text
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to analyze the cabling issue: {error}"
+                    )
 
 
 # ----------------------------
