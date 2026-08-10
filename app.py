@@ -7,6 +7,7 @@ from openai import OpenAI
 from prompts import SYSTEM_PROMPT, LOG_ANALYZER_PROMPT
 from utils import load_knowledge_base, search_knowledge_base
 
+
 # ----------------------------
 # Load configuration
 # ----------------------------
@@ -40,6 +41,12 @@ st.set_page_config(
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "page" not in st.session_state:
+    st.session_state.page = "AI Chat"
+
+if "log_input" not in st.session_state:
+    st.session_state.log_input = ""
+
 
 # ----------------------------
 # Load knowledge base
@@ -59,45 +66,59 @@ with st.sidebar:
 
     st.subheader("Quick Tools")
 
-    st.button(
+    if st.button(
+        "💬 AI Chat",
+        use_container_width=True,
+    ):
+        st.session_state.page = "AI Chat"
+
+    if st.button(
         "🔧 Server Troubleshooting",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Server Troubleshooting"
 
-    st.button(
+    if st.button(
         "🖥️ Rack & Stack",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Rack & Stack"
 
-    st.button(
+    if st.button(
         "🌐 Networking",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Networking"
 
-    st.button(
+    if st.button(
         "🔌 Cabling",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Cabling"
 
-    st.button(
+    if st.button(
         "📄 SOP Generator",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "SOP Generator"
 
-    st.button(
+    if st.button(
         "📋 Incident Summary",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Incident Summary"
 
-    st.button(
+    if st.button(
         "📊 Log Analyzer",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Log Analyzer"
 
-    st.button(
+    if st.button(
         "🎤 Interview Practice",
         use_container_width=True,
-    )
+    ):
+        st.session_state.page = "Interview Practice"
 
     st.markdown("---")
 
@@ -108,55 +129,138 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-    st.caption("Version 0.2")
+    st.caption("Version 0.3")
 
 
 # ----------------------------
-# Main page
+# AI Chat Page
 # ----------------------------
 
-st.title("🖥️ AI Data Center Assistant")
+if st.session_state.page == "AI Chat":
 
-st.write(
-    "Ask questions about servers, networking, racks, hardware, "
-    "or data center operations."
-)
-
-
-# ----------------------------
-# Knowledge base preview
-# ----------------------------
-
-with st.expander("📚 Knowledge Base"):
-    st.text(knowledge)
-
-
-# ----------------------------
-# Display chat history
-# ----------------------------
-
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-
-# ----------------------------
-# Log Analyzer
-# ----------------------------
-
-with st.expander("📊 AI Log Analyzer"):
+    st.title("💬 AI Data Center Assistant")
 
     st.write(
-        "Paste a log or upload a .txt/.log file for AI analysis."
+        "Ask questions about servers, networking, racks, hardware, "
+        "or data center operations."
+    )
+
+    with st.expander("📚 Knowledge Base"):
+        st.text(knowledge)
+
+    # Display previous chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat input
+    question = st.chat_input(
+        "Ask a data center question...",
+        key="main_chat_input",
+    )
+
+    if question:
+
+        # Save user's message
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": question,
+            }
+        )
+
+        # Display user's message
+        with st.chat_message("user"):
+            st.markdown(question)
+
+        # ----------------------------
+        # Search knowledge base
+        # ----------------------------
+
+        search_results = search_knowledge_base(question)
+
+        relevant_knowledge = ""
+
+        for score, filename, content in search_results:
+            relevant_knowledge += (
+                f"\n\nSource: {filename}\n"
+                f"{content}"
+            )
+
+        if not relevant_knowledge:
+            relevant_knowledge = (
+                "No relevant internal documentation was found."
+            )
+
+        # ----------------------------
+        # Build conversation
+        # ----------------------------
+
+        conversation = [
+            {
+                "role": "system",
+                "content": (
+                    SYSTEM_PROMPT
+                    + "\n\n"
+                    + "Use the following retrieved internal documentation "
+                    + "when relevant. "
+                    + "Prefer the retrieved documentation when answering. "
+                    + "If the retrieved documentation does not fully answer "
+                    + "the question, say so and then provide general guidance."
+                    + "\n\nRetrieved Knowledge:\n"
+                    + relevant_knowledge
+                ),
+            }
+        ]
+
+        conversation.extend(st.session_state.messages)
+
+        # ----------------------------
+        # Generate AI response
+        # ----------------------------
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                try:
+                    response = client.responses.create(
+                        model="gpt-4.1",
+                        input=conversation,
+                    )
+
+                    answer = response.output_text
+
+                    st.markdown(answer)
+
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": answer,
+                        }
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to generate a response: {error}"
+                    )
+
+
+# ----------------------------
+# Log Analyzer Page
+# ----------------------------
+
+elif st.session_state.page == "Log Analyzer":
+
+    st.title("📊 AI Log Analyzer")
+
+    st.write(
+        "Upload or paste a system log for AI-powered analysis."
     )
 
     uploaded_log = st.file_uploader(
         "Upload a log file",
         type=["txt", "log"],
+        key="log_file_upload",
     )
-
-    if "log_input" not in st.session_state:
-        st.session_state.log_input = ""
 
     if uploaded_log is not None:
         try:
@@ -175,7 +279,7 @@ with st.expander("📊 AI Log Analyzer"):
 
     log_text = st.text_area(
         "Log contents",
-        height=200,
+        height=300,
         key="log_input",
     )
 
@@ -188,7 +292,6 @@ with st.expander("📊 AI Log Analyzer"):
 
         else:
             with st.spinner("Analyzing log..."):
-
                 try:
                     log_response = client.responses.create(
                         model="gpt-4.1",
@@ -204,7 +307,9 @@ with st.expander("📊 AI Log Analyzer"):
                         ],
                     )
 
-                    st.markdown(log_response.output_text)
+                    st.markdown(
+                        log_response.output_text
+                    )
 
                 except Exception as error:
                     st.error(
@@ -213,91 +318,91 @@ with st.expander("📊 AI Log Analyzer"):
 
 
 # ----------------------------
-# Chat input
+# Server Troubleshooting Page
 # ----------------------------
 
-question = st.chat_input("Ask a data center question...")
+elif st.session_state.page == "Server Troubleshooting":
 
-if question:
+    st.title("🔧 Server Troubleshooting")
 
-    # Save the user's message
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": question,
-        }
+    st.info(
+        "This tool is coming next."
     )
 
-    # Display the user's message
-    with st.chat_message("user"):
-        st.markdown(question)
 
-    # ----------------------------
-    # Search knowledge base
-    # ----------------------------
+# ----------------------------
+# Rack & Stack Page
+# ----------------------------
 
-    search_results = search_knowledge_base(question)
+elif st.session_state.page == "Rack & Stack":
 
-    relevant_knowledge = ""
+    st.title("🖥️ Rack & Stack")
 
-    for score, filename, content in search_results:
-        relevant_knowledge += (
-            f"\n\nSource: {filename}\n"
-            f"{content}"
-        )
+    st.info(
+        "This tool is coming soon."
+    )
 
-    if not relevant_knowledge:
-        relevant_knowledge = (
-            "No relevant internal documentation was found."
-        )
 
-    # ----------------------------
-    # Build the conversation
-    # ----------------------------
+# ----------------------------
+# Networking Page
+# ----------------------------
 
-    conversation = [
-        {
-            "role": "system",
-            "content": (
-                SYSTEM_PROMPT
-                + "\n\n"
-                + "Use the following retrieved internal documentation "
-                + "when relevant. "
-                + "Prefer the retrieved documentation when answering. "
-                + "If the retrieved documentation does not fully answer "
-                + "the question, say so and then provide general guidance."
-                + "\n\nRetrieved Knowledge:\n"
-                + relevant_knowledge
-            ),
-        }
-    ]
+elif st.session_state.page == "Networking":
 
-    conversation.extend(st.session_state.messages)
+    st.title("🌐 Networking Assistant")
 
-    # ----------------------------
-    # Generate the AI response
-    # ----------------------------
+    st.info(
+        "This tool is coming soon."
+    )
 
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
-            try:
-                response = client.responses.create(
-                    model="gpt-4.1",
-                    input=conversation,
-                )
 
-                answer = response.output_text
+# ----------------------------
+# Cabling Page
+# ----------------------------
 
-                st.markdown(answer)
+elif st.session_state.page == "Cabling":
 
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": answer,
-                    }
-                )
+    st.title("🔌 Cabling Assistant")
 
-            except Exception as error:
-                st.error(
-                    f"Unable to generate a response: {error}"
-                )
+    st.info(
+        "This tool is coming soon."
+    )
+
+
+# ----------------------------
+# SOP Generator Page
+# ----------------------------
+
+elif st.session_state.page == "SOP Generator":
+
+    st.title("📄 SOP Generator")
+
+    st.info(
+        "This tool is coming soon."
+    )
+
+
+# ----------------------------
+# Incident Summary Page
+# ----------------------------
+
+elif st.session_state.page == "Incident Summary":
+
+    st.title("📋 Incident Summary")
+
+    st.info(
+        "This tool is coming soon."
+    )
+
+
+# ----------------------------
+# Interview Practice Page
+# ----------------------------
+
+elif st.session_state.page == "Interview Practice":
+
+    st.title("🎤 Interview Practice")
+
+    st.info(
+        "This tool is coming soon."
+    )
