@@ -10,6 +10,7 @@ from prompts import (
     SOP_GENERATOR_PROMPT,
     INCIDENT_SUMMARY_PROMPT,
     SERVER_TROUBLESHOOTING_PROMPT,
+    NETWORKING_ASSISTANT_PROMPT,
 )
 
 
@@ -421,14 +422,79 @@ elif st.session_state.page == "Rack & Stack":
 # ----------------------------
 # Networking Page
 # ----------------------------
-
 elif st.session_state.page == "Networking":
 
-    st.title("🌐 Networking Assistant")
+    st.title("🌐 AI Networking Assistant")
 
-    st.info(
-        "This tool is coming soon."
+    st.write(
+        "Describe a connectivity or network problem and the assistant "
+        "will walk through a structured troubleshooting process."
     )
+
+    network_problem = st.text_area(
+        "Describe the network issue",
+        placeholder=(
+            "Example: Server01 can ping its own IP address but cannot "
+            "ping the default gateway."
+        ),
+        height=180,
+        key="network_problem",
+    )
+
+    if st.button("Troubleshoot Network"):
+
+        if not network_problem.strip():
+            st.warning(
+                "Please describe the network problem before troubleshooting."
+            )
+
+        else:
+
+            search_results = search_knowledge_base(network_problem)
+
+            relevant_knowledge = ""
+
+            for score, filename, content in search_results:
+                relevant_knowledge += (
+                    f"\n\nSource: {filename}\n"
+                    f"{content}"
+                )
+
+            if not relevant_knowledge:
+                relevant_knowledge = (
+                    "No relevant internal documentation was found."
+                )
+
+            with st.spinner("Analyzing network issue..."):
+
+                try:
+                    network_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    NETWORKING_ASSISTANT_PROMPT
+                                    + "\n\n"
+                                    + "Retrieved Internal Documentation:\n"
+                                    + relevant_knowledge
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": network_problem,
+                            },
+                        ],
+                    )
+
+                    st.markdown(
+                        network_response.output_text
+                    )
+
+                except Exception as error:
+                    st.error(
+                        f"Unable to troubleshoot the network: {error}"
+                    )
 
 
 # ----------------------------
