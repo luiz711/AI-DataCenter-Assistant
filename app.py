@@ -17,7 +17,7 @@ from prompts import (
 )
 
 from utils import load_knowledge_base, search_knowledge_base
-
+from embeddings import semantic_search_knowledge_base
 
 # ----------------------------
 # Load configuration
@@ -213,7 +213,10 @@ if st.session_state.page == "AI Chat":
         # Search knowledge base
         # ----------------------------
 
-        search_results = search_knowledge_base(question)
+        search_results = semantic_search_knowledge_base(
+        client,
+        question,
+)
 
         relevant_knowledge = ""
 
@@ -401,6 +404,10 @@ elif st.session_state.page == "Log Analyzer":
 # SERVER TROUBLESHOOTING PAGE
 # ============================================================
 
+# ============================================================
+# SERVER TROUBLESHOOTING PAGE
+# ============================================================
+
 elif st.session_state.page == "Server Troubleshooting":
 
     st.title("🔧 AI Server Troubleshooting")
@@ -411,7 +418,7 @@ elif st.session_state.page == "Server Troubleshooting":
     )
 
     # ----------------------------
-    # Step 1
+    # Step 1: Describe the problem
     # ----------------------------
 
     if st.session_state.troubleshoot_step == 1:
@@ -428,7 +435,10 @@ elif st.session_state.page == "Server Troubleshooting":
             key="troubleshoot_problem",
         )
 
-        if st.button("Continue"):
+        if st.button(
+            "Continue",
+            key="troubleshoot_continue_1",
+        ):
 
             if not problem.strip():
                 st.warning(
@@ -436,12 +446,16 @@ elif st.session_state.page == "Server Troubleshooting":
                 )
 
             else:
-                st.session_state.troubleshoot_answers["problem"] = problem
+                st.session_state.troubleshoot_answers[
+                    "problem"
+                ] = problem
+
                 st.session_state.troubleshoot_step = 2
+
                 st.rerun()
 
     # ----------------------------
-    # Step 2
+    # Step 2: Power status
     # ----------------------------
 
     elif st.session_state.troubleshoot_step == 2:
@@ -458,17 +472,21 @@ elif st.session_state.page == "Server Troubleshooting":
             key="power_status",
         )
 
-        if st.button("Continue"):
+        if st.button(
+            "Continue",
+            key="troubleshoot_continue_2",
+        ):
 
             st.session_state.troubleshoot_answers[
                 "power_status"
             ] = power_status
 
             st.session_state.troubleshoot_step = 3
+
             st.rerun()
 
     # ----------------------------
-    # Step 3
+    # Step 3: Indicator lights
     # ----------------------------
 
     elif st.session_state.troubleshoot_step == 3:
@@ -486,17 +504,21 @@ elif st.session_state.page == "Server Troubleshooting":
             key="led_status",
         )
 
-        if st.button("Continue"):
+        if st.button(
+            "Continue",
+            key="troubleshoot_continue_3",
+        ):
 
             st.session_state.troubleshoot_answers[
                 "led_status"
             ] = led_status
 
             st.session_state.troubleshoot_step = 4
+
             st.rerun()
 
     # ----------------------------
-    # Step 4
+    # Step 4: Rack power
     # ----------------------------
 
     elif st.session_state.troubleshoot_step == 4:
@@ -513,7 +535,10 @@ elif st.session_state.page == "Server Troubleshooting":
             key="rack_power",
         )
 
-        if st.button("Generate Diagnosis"):
+        if st.button(
+            "Generate Diagnosis",
+            key="troubleshoot_generate",
+        ):
 
             st.session_state.troubleshoot_answers[
                 "rack_power"
@@ -535,7 +560,10 @@ Other Rack Equipment Has Power:
 {answers.get("rack_power", "Not provided")}
 """
 
+            # ----------------------------
             # Search internal documentation
+            # ----------------------------
+
             search_results = search_knowledge_base(
                 troubleshooting_summary
             )
@@ -553,39 +581,60 @@ Other Rack Equipment Has Power:
                     "No relevant internal documentation was found."
                 )
 
+            retrieved_sources = [
+                filename
+                for score, filename, content in search_results
+            ]
+
+            # ----------------------------
+            # Generate diagnosis
+            # ----------------------------
+
             with st.spinner(
                 "Analyzing troubleshooting results..."
             ):
 
                 try:
-
-                    troubleshooting_response = (
-                        client.responses.create(
-                            model="gpt-4.1",
-                            input=[
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        SERVER_TROUBLESHOOTING_PROMPT
-                                        + "\n\n"
-                                        + "Retrieved Internal Documentation:\n"
-                                        + relevant_knowledge
-                                    ),
-                                },
-                                {
-                                    "role": "user",
-                                    "content": troubleshooting_summary,
-                                },
-                            ],
-                        )
+                    troubleshooting_response = client.responses.create(
+                        model="gpt-4.1",
+                        input=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    SERVER_TROUBLESHOOTING_PROMPT
+                                    + "\n\n"
+                                    + "Retrieved Internal Documentation:\n"
+                                    + relevant_knowledge
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": troubleshooting_summary,
+                            },
+                        ],
                     )
 
                     st.markdown(
                         troubleshooting_response.output_text
                     )
 
-                except Exception as error:
+                    if retrieved_sources:
 
+                        with st.expander(
+                            "📚 Retrieved Sources"
+                        ):
+
+                            for source in retrieved_sources:
+                                st.write(
+                                    f"• {source}"
+                                )
+
+                    else:
+                        st.caption(
+                            "No internal knowledge-base sources were retrieved."
+                        )
+
+                except Exception as error:
                     st.error(
                         f"Unable to troubleshoot the server: {error}"
                     )
@@ -596,7 +645,10 @@ Other Rack Equipment Has Power:
 
     st.markdown("---")
 
-    if st.button("🔄 Start Over"):
+    if st.button(
+        "🔄 Start Over",
+        key="troubleshoot_reset",
+    ):
 
         st.session_state.troubleshoot_step = 1
         st.session_state.troubleshoot_answers = {}
