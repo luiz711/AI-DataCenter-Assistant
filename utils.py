@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -46,12 +47,28 @@ def search_knowledge_base(query):
         "when",
         "where",
         "why",
+        "with",
+        "should",
+        "can",
+        "could",
+        "would",
+        "my",
+        "this",
+        "that",
     }
 
+    # Remove punctuation and normalize the query
+    cleaned_query = re.sub(
+        r"[^a-zA-Z0-9\s]",
+        " ",
+        query.lower(),
+    )
+
+    # Remove common words
     keywords = [
         word
-        for word in query.lower().split()
-        if word not in stop_words
+        for word in cleaned_query.split()
+        if word not in stop_words and len(word) > 2
     ]
 
     results = []
@@ -61,15 +78,53 @@ def search_knowledge_base(query):
         with open(file, "r", encoding="utf-8") as f:
             content = f.read()
 
+        searchable_text = (
+            file.stem.lower()
+            + " "
+            + content.lower()
+        )
+
         score = 0
 
         for word in keywords:
-            if word in content.lower():
-                score += 1
+
+            # Exact keyword match
+            if word in searchable_text:
+                score += 2
+
+            # Simple plural/singular matching
+            if word.endswith("s"):
+
+                singular = word[:-1]
+
+                if singular in searchable_text:
+                    score += 1
+
+            else:
+
+                plural = word + "s"
+
+                if plural in searchable_text:
+                    score += 1
+
+        # Extra weight for filename matches
+        for word in keywords:
+
+            if word in file.stem.lower():
+                score += 3
 
         if score > 0:
-            results.append((score, file.name, content))
+            results.append(
+                (
+                    score,
+                    file.name,
+                    content,
+                )
+            )
 
-    results.sort(reverse=True)
+    results.sort(
+        key=lambda item: item[0],
+        reverse=True,
+    )
 
     return results[:3]

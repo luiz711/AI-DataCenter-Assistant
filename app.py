@@ -16,7 +16,6 @@ from prompts import (
     INTERVIEW_PRACTICE_PROMPT,
 )
 
-
 from utils import load_knowledge_base, search_knowledge_base
 
 
@@ -59,6 +58,11 @@ if "page" not in st.session_state:
 if "log_input" not in st.session_state:
     st.session_state.log_input = ""
 
+if "troubleshoot_step" not in st.session_state:
+    st.session_state.troubleshoot_step = 1
+
+if "troubleshoot_answers" not in st.session_state:
+    st.session_state.troubleshoot_answers = {}
 
 # ----------------------------
 # Load knowledge base
@@ -72,6 +76,7 @@ knowledge = load_knowledge_base()
 # ----------------------------
 
 with st.sidebar:
+
     st.title("🖥️ AI Data Center")
 
     st.markdown("---")
@@ -144,9 +149,9 @@ with st.sidebar:
     st.caption("Version 0.3")
 
 
-# ----------------------------
-# AI Chat Page
-# ----------------------------
+# ============================================================
+# AI CHAT PAGE
+# ============================================================
 
 if st.session_state.page == "AI Chat":
 
@@ -160,12 +165,31 @@ if st.session_state.page == "AI Chat":
     with st.expander("📚 Knowledge Base"):
         st.text(knowledge)
 
-    # Display previous chat messages
+    # ----------------------------
+    # Display previous chat history
+    # ----------------------------
+
     for message in st.session_state.messages:
+
         with st.chat_message(message["role"]):
+
             st.markdown(message["content"])
 
+            if message["role"] == "assistant":
+
+                sources = message.get("sources", [])
+
+                if sources:
+
+                    with st.expander("📚 Retrieved Sources"):
+
+                        for source in sources:
+                            st.write(f"• {source}")
+
+    # ----------------------------
     # Chat input
+    # ----------------------------
+
     question = st.chat_input(
         "Ask a data center question...",
         key="main_chat_input",
@@ -173,7 +197,7 @@ if st.session_state.page == "AI Chat":
 
     if question:
 
-        # Save user's message
+        # Save user message
         st.session_state.messages.append(
             {
                 "role": "user",
@@ -181,7 +205,7 @@ if st.session_state.page == "AI Chat":
             }
         )
 
-        # Display user's message
+        # Display user message
         with st.chat_message("user"):
             st.markdown(question)
 
@@ -194,15 +218,22 @@ if st.session_state.page == "AI Chat":
         relevant_knowledge = ""
 
         for score, filename, content in search_results:
+
             relevant_knowledge += (
                 f"\n\nSource: {filename}\n"
                 f"{content}"
             )
 
         if not relevant_knowledge:
+
             relevant_knowledge = (
                 "No relevant internal documentation was found."
             )
+
+        retrieved_sources = [
+            filename
+            for score, filename, content in search_results
+        ]
 
         # ----------------------------
         # Build conversation
@@ -225,15 +256,28 @@ if st.session_state.page == "AI Chat":
             }
         ]
 
-        conversation.extend(st.session_state.messages)
+        # IMPORTANT:
+        # Only send role + content to OpenAI.
+        # Do NOT send our custom "sources" field.
+        for message in st.session_state.messages:
+
+            conversation.append(
+                {
+                    "role": message["role"],
+                    "content": message["content"],
+                }
+            )
 
         # ----------------------------
         # Generate AI response
         # ----------------------------
 
         with st.chat_message("assistant"):
+
             with st.spinner("Analyzing..."):
+
                 try:
+
                     response = client.responses.create(
                         model="gpt-4.1",
                         input=conversation,
@@ -243,22 +287,38 @@ if st.session_state.page == "AI Chat":
 
                     st.markdown(answer)
 
+                    if retrieved_sources:
+
+                        with st.expander("📚 Retrieved Sources"):
+
+                            for source in retrieved_sources:
+                                st.write(f"• {source}")
+
+                    else:
+
+                        st.caption(
+                            "No internal knowledge-base sources were retrieved."
+                        )
+
+                    # Save answer + sources locally in Streamlit
                     st.session_state.messages.append(
                         {
                             "role": "assistant",
                             "content": answer,
+                            "sources": retrieved_sources,
                         }
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to generate a response: {error}"
                     )
 
 
-# ----------------------------
-# Log Analyzer Page
-# ----------------------------
+# ============================================================
+# LOG ANALYZER PAGE
+# ============================================================
 
 elif st.session_state.page == "Log Analyzer":
 
@@ -275,7 +335,9 @@ elif st.session_state.page == "Log Analyzer":
     )
 
     if uploaded_log is not None:
+
         try:
+
             uploaded_text = uploaded_log.getvalue().decode("utf-8")
 
             st.session_state.log_input = uploaded_text
@@ -285,6 +347,7 @@ elif st.session_state.page == "Log Analyzer":
             )
 
         except UnicodeDecodeError:
+
             st.error(
                 "This file could not be read as UTF-8 text."
             )
@@ -298,13 +361,17 @@ elif st.session_state.page == "Log Analyzer":
     if st.button("Analyze Log"):
 
         if not log_text.strip():
+
             st.warning(
                 "Please paste or upload a log before analyzing."
             )
 
         else:
+
             with st.spinner("Analyzing log..."):
+
                 try:
+
                     log_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -324,45 +391,154 @@ elif st.session_state.page == "Log Analyzer":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to analyze the log: {error}"
                     )
 
 
-# ----------------------------
-# Server Troubleshooting Page
-# ----------------------------
+# ============================================================
+# SERVER TROUBLESHOOTING PAGE
+# ============================================================
 
 elif st.session_state.page == "Server Troubleshooting":
 
     st.title("🔧 AI Server Troubleshooting")
 
     st.write(
-        "Describe a server problem and the assistant will help you "
-        "work through a structured troubleshooting process."
+        "Work through a guided diagnostic process before generating "
+        "an AI troubleshooting recommendation."
     )
 
-    server_problem = st.text_area(
-        "Describe the server issue",
-        placeholder=(
-            "Example: Server powers on, but there is no network connectivity. "
-            "The link light on NIC 1 is off."
-        ),
-        height=180,
-        key="server_problem",
-    )
+    # ----------------------------
+    # Step 1
+    # ----------------------------
 
-    if st.button("Troubleshoot Server"):
+    if st.session_state.troubleshoot_step == 1:
 
-        if not server_problem.strip():
-            st.warning(
-                "Please describe the server problem before troubleshooting."
+        st.subheader("Step 1: Describe the problem")
+
+        problem = st.text_area(
+            "What is happening?",
+            placeholder=(
+                "Example: Server01 will not power on. "
+                "There are no LEDs and the fans do not spin."
+            ),
+            height=150,
+            key="troubleshoot_problem",
+        )
+
+        if st.button("Continue"):
+
+            if not problem.strip():
+                st.warning(
+                    "Please describe the server problem."
+                )
+
+            else:
+                st.session_state.troubleshoot_answers["problem"] = problem
+                st.session_state.troubleshoot_step = 2
+                st.rerun()
+
+    # ----------------------------
+    # Step 2
+    # ----------------------------
+
+    elif st.session_state.troubleshoot_step == 2:
+
+        st.subheader("Step 2: Power status")
+
+        power_status = st.radio(
+            "Does the server show any signs of power?",
+            [
+                "Yes",
+                "No",
+                "Not sure",
+            ],
+            key="power_status",
+        )
+
+        if st.button("Continue"):
+
+            st.session_state.troubleshoot_answers[
+                "power_status"
+            ] = power_status
+
+            st.session_state.troubleshoot_step = 3
+            st.rerun()
+
+    # ----------------------------
+    # Step 3
+    # ----------------------------
+
+    elif st.session_state.troubleshoot_step == 3:
+
+        st.subheader("Step 3: Indicator lights")
+
+        led_status = st.radio(
+            "What do the server LEDs show?",
+            [
+                "Normal / green",
+                "Amber / warning",
+                "No LEDs",
+                "Unknown",
+            ],
+            key="led_status",
+        )
+
+        if st.button("Continue"):
+
+            st.session_state.troubleshoot_answers[
+                "led_status"
+            ] = led_status
+
+            st.session_state.troubleshoot_step = 4
+            st.rerun()
+
+    # ----------------------------
+    # Step 4
+    # ----------------------------
+
+    elif st.session_state.troubleshoot_step == 4:
+
+        st.subheader("Step 4: Rack power")
+
+        rack_power = st.radio(
+            "Do other devices in the rack have power?",
+            [
+                "Yes",
+                "No",
+                "Not sure",
+            ],
+            key="rack_power",
+        )
+
+        if st.button("Generate Diagnosis"):
+
+            st.session_state.troubleshoot_answers[
+                "rack_power"
+            ] = rack_power
+
+            answers = st.session_state.troubleshoot_answers
+
+            troubleshooting_summary = f"""
+Server Problem:
+{answers.get("problem", "Not provided")}
+
+Signs of Power:
+{answers.get("power_status", "Not provided")}
+
+LED Status:
+{answers.get("led_status", "Not provided")}
+
+Other Rack Equipment Has Power:
+{answers.get("rack_power", "Not provided")}
+"""
+
+            # Search internal documentation
+            search_results = search_knowledge_base(
+                troubleshooting_summary
             )
-
-        else:
-
-            # Search your internal knowledge base
-            search_results = search_knowledge_base(server_problem)
 
             relevant_knowledge = ""
 
@@ -377,26 +553,31 @@ elif st.session_state.page == "Server Troubleshooting":
                     "No relevant internal documentation was found."
                 )
 
-            with st.spinner("Analyzing server issue..."):
+            with st.spinner(
+                "Analyzing troubleshooting results..."
+            ):
 
                 try:
-                    troubleshooting_response = client.responses.create(
-                        model="gpt-4.1",
-                        input=[
-                            {
-                                "role": "system",
-                                "content": (
-                                    SERVER_TROUBLESHOOTING_PROMPT
-                                    + "\n\n"
-                                    + "Retrieved Internal Documentation:\n"
-                                    + relevant_knowledge
-                                ),
-                            },
-                            {
-                                "role": "user",
-                                "content": server_problem,
-                            },
-                        ],
+
+                    troubleshooting_response = (
+                        client.responses.create(
+                            model="gpt-4.1",
+                            input=[
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        SERVER_TROUBLESHOOTING_PROMPT
+                                        + "\n\n"
+                                        + "Retrieved Internal Documentation:\n"
+                                        + relevant_knowledge
+                                    ),
+                                },
+                                {
+                                    "role": "user",
+                                    "content": troubleshooting_summary,
+                                },
+                            ],
+                        )
                     )
 
                     st.markdown(
@@ -404,14 +585,27 @@ elif st.session_state.page == "Server Troubleshooting":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to troubleshoot the server: {error}"
                     )
 
+    # ----------------------------
+    # Reset wizard
+    # ----------------------------
 
-# ----------------------------
-# Rack & Stack Page
-# ----------------------------
+    st.markdown("---")
+
+    if st.button("🔄 Start Over"):
+
+        st.session_state.troubleshoot_step = 1
+        st.session_state.troubleshoot_answers = {}
+
+        st.rerun()
+
+# ============================================================
+# RACK & STACK PAGE
+# ============================================================
 
 elif st.session_state.page == "Rack & Stack":
 
@@ -435,30 +629,38 @@ elif st.session_state.page == "Rack & Stack":
     if st.button("Create Rack Plan"):
 
         if not rack_request.strip():
+
             st.warning(
                 "Please describe the rack deployment before creating a plan."
             )
 
         else:
 
-            search_results = search_knowledge_base(rack_request)
+            search_results = search_knowledge_base(
+                rack_request
+            )
 
             relevant_knowledge = ""
 
             for score, filename, content in search_results:
+
                 relevant_knowledge += (
                     f"\n\nSource: {filename}\n"
                     f"{content}"
                 )
 
             if not relevant_knowledge:
+
                 relevant_knowledge = (
                     "No relevant internal documentation was found."
                 )
 
-            with st.spinner("Building rack deployment plan..."):
+            with st.spinner(
+                "Building rack deployment plan..."
+            ):
 
                 try:
+
                     rack_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -483,14 +685,16 @@ elif st.session_state.page == "Rack & Stack":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to create the rack plan: {error}"
                     )
 
 
-# ----------------------------
-# Networking Page
-# ----------------------------
+# ============================================================
+# NETWORKING PAGE
+# ============================================================
+
 elif st.session_state.page == "Networking":
 
     st.title("🌐 AI Networking Assistant")
@@ -513,23 +717,28 @@ elif st.session_state.page == "Networking":
     if st.button("Troubleshoot Network"):
 
         if not network_problem.strip():
+
             st.warning(
                 "Please describe the network problem before troubleshooting."
             )
 
         else:
 
-            search_results = search_knowledge_base(network_problem)
+            search_results = search_knowledge_base(
+                network_problem
+            )
 
             relevant_knowledge = ""
 
             for score, filename, content in search_results:
+
                 relevant_knowledge += (
                     f"\n\nSource: {filename}\n"
                     f"{content}"
                 )
 
             if not relevant_knowledge:
+
                 relevant_knowledge = (
                     "No relevant internal documentation was found."
                 )
@@ -537,6 +746,7 @@ elif st.session_state.page == "Networking":
             with st.spinner("Analyzing network issue..."):
 
                 try:
+
                     network_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -561,14 +771,15 @@ elif st.session_state.page == "Networking":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to troubleshoot the network: {error}"
                     )
 
 
-# ----------------------------
-# Cabling Page
-# ----------------------------
+# ============================================================
+# CABLING PAGE
+# ============================================================
 
 elif st.session_state.page == "Cabling":
 
@@ -592,23 +803,28 @@ elif st.session_state.page == "Cabling":
     if st.button("Analyze Cabling Issue"):
 
         if not cabling_problem.strip():
+
             st.warning(
                 "Please describe the cabling issue before analyzing."
             )
 
         else:
 
-            search_results = search_knowledge_base(cabling_problem)
+            search_results = search_knowledge_base(
+                cabling_problem
+            )
 
             relevant_knowledge = ""
 
             for score, filename, content in search_results:
+
                 relevant_knowledge += (
                     f"\n\nSource: {filename}\n"
                     f"{content}"
                 )
 
             if not relevant_knowledge:
+
                 relevant_knowledge = (
                     "No relevant internal documentation was found."
                 )
@@ -616,6 +832,7 @@ elif st.session_state.page == "Cabling":
             with st.spinner("Analyzing cabling issue..."):
 
                 try:
+
                     cabling_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -640,14 +857,15 @@ elif st.session_state.page == "Cabling":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to analyze the cabling issue: {error}"
                     )
 
 
-# ----------------------------
-# SOP Generator Page
-# ----------------------------
+# ============================================================
+# SOP GENERATOR PAGE
+# ============================================================
 
 elif st.session_state.page == "SOP Generator":
 
@@ -668,12 +886,10 @@ elif st.session_state.page == "SOP Generator":
         key="sop_task",
     )
 
-    if st.button(
-        "Generate SOP",
-        use_container_width=False,
-    ):
+    if st.button("Generate SOP"):
 
         if not sop_task.strip():
+
             st.warning(
                 "Please enter a procedure before generating an SOP."
             )
@@ -683,6 +899,7 @@ elif st.session_state.page == "SOP Generator":
             with st.spinner("Generating SOP..."):
 
                 try:
+
                     sop_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -697,17 +914,20 @@ elif st.session_state.page == "SOP Generator":
                         ],
                     )
 
-                    st.markdown(sop_response.output_text)
+                    st.markdown(
+                        sop_response.output_text
+                    )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to generate the SOP: {error}"
                     )
 
 
-# ----------------------------
-# Incident Summary Page
-# ----------------------------
+# ============================================================
+# INCIDENT SUMMARY PAGE
+# ============================================================
 
 elif st.session_state.page == "Incident Summary":
 
@@ -733,14 +953,19 @@ elif st.session_state.page == "Incident Summary":
     if st.button("Generate Incident Summary"):
 
         if not incident_notes.strip():
+
             st.warning(
                 "Please enter incident notes before generating a summary."
             )
 
         else:
-            with st.spinner("Creating incident summary..."):
+
+            with st.spinner(
+                "Creating incident summary..."
+            ):
 
                 try:
+
                     incident_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -760,14 +985,15 @@ elif st.session_state.page == "Incident Summary":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to generate the incident summary: {error}"
                     )
 
 
-# ----------------------------
-# Interview Practice Page
-# ----------------------------
+# ============================================================
+# INTERVIEW PRACTICE PAGE
+# ============================================================
 
 elif st.session_state.page == "Interview Practice":
 
@@ -809,14 +1035,17 @@ elif st.session_state.page == "Interview Practice":
     if st.button("Evaluate My Answer"):
 
         if not interview_answer.strip():
+
             st.warning(
                 "Please enter your answer before requesting feedback."
             )
 
         else:
+
             with st.spinner("Reviewing your answer..."):
 
                 try:
+
                     interview_response = client.responses.create(
                         model="gpt-4.1",
                         input=[
@@ -841,6 +1070,7 @@ elif st.session_state.page == "Interview Practice":
                     )
 
                 except Exception as error:
+
                     st.error(
                         f"Unable to evaluate the answer: {error}"
                     )
